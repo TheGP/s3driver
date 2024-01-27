@@ -1,0 +1,19 @@
+{
+  "name": "s3driver",
+  "version": "1.0.0",
+  "description": "Simple driver for AWS S3 compatible storage",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Eugene Bos",
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.826.0",
+    "file-type": "^16.1.0",
+    "mime-types": "^2.1.28",
+    "p-queue": "^6.6.2",
+    "promise-queue": "^2.2.5"
+  }
+}
