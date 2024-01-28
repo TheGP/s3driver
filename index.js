@@ -596,13 +596,13 @@ module.exports = class s3driver {
 	 * @param {string} file - S3 object key to delete.
 	 * @returns {Promise<string|boolean>} - A promise resolving to the deleted object key if successful, or false on failure.
 	 */
-	delete(file, attempt = 0) {
+	delete(path, attempt = 0) {
 
 	    let self = this;
 
 	    const params = {
 	        Bucket: this.bucket,
-	        Key: file,
+	        Key: path,
 	    };
 	    return new Promise((resolve, reject) => {
 			this.s3.deleteObject(params, function(err, data) {
@@ -614,7 +614,7 @@ module.exports = class s3driver {
 
 	            		setTimeout(() => {
 
-	            			resolve(self.delete(file, ++attempt));
+	            			resolve(self.delete(path, ++attempt));
 	        
 	            		}, 2000);
 	            	} else {
@@ -622,13 +622,13 @@ module.exports = class s3driver {
 	            			console.log('after trying 13 times "delete" failed', err);
 	            			reject(false);
 	            		} else {
-	            			resolve(this.delete(file, ++attempt));
+	            			resolve(this.delete(path, ++attempt));
 	            		}
 	            	}
 
 					//return resolve(false);
 				} else {
-					return resolve(file);
+					return resolve(path);
 				}
 			});
 	    });

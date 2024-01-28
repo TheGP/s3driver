@@ -72,11 +72,11 @@ console.log(await remote.list(dir));
 	 * {number} [params.files_concurrency] - Number of concurrent files operations.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 
-- **`downloadDir(prefix = '', dir, params = {})`:**
+- **`downloadDir(s3Path = '', dir, params = {})`:**
     Downloads a directory from S3, including subdirectories and files, skips empty dirs.  
     Can handle subdirectories, overwrite existing files, and check for modifications.
 
-	 * {string} [prefix=''] - Prefix of S3 object keys to download.
+	 * {string} [s3Path=''] - Prefix of S3 object keys to download.
 	 * {string} dir - Local directory path to save downloaded files.
 	 * {Object} [params={}] - Additional parameters for customization.
 	 * {string} [params.acl=public-read] - Access control list. Default is "public-read."
@@ -86,7 +86,7 @@ console.log(await remote.list(dir));
 	 * {number} [params.files_concurrency] - Number of concurrent files operations.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the download is successful.
 
-- **`list(prefix = '', is_dir = false)`:**
+- **`list(path = '', is_dir = false)`:**
     Lists objects in an S3 bucket with a given prefix.
 	 * {string} path - S3 directory path to list.
 	 * {boolean} [full_data=false] - Flag to include full metadata for each object.
@@ -110,7 +110,7 @@ console.log(await remote.list(dir));
 
 - **`delete(s3Path)`:**
     Deletes a file from S3.
-	 * {string} file - S3 object key to delete.
+	 * {string} path - S3 object key to delete.
 	 * @returns {Promise<string|boolean>} - A promise resolving to the deleted object key if successful, or false on failure.
 
 - **`deleteDir(s3Path)`:**
@@ -124,7 +124,7 @@ console.log(await remote.list(dir));
 	 * {boolean} [full_data=false] - Flag to include full metadata for each object.
 	 * @returns {Promise<Array|string>} - A promise resolving to an array of object keys or full metadata objects.
 
-- **`getMetaData(s3Path)`:**
+- **`getMetaData(key)`:**
     Retrieves metadata for a specified S3 object.
 	 * {string} key - S3 object key for which to retrieve metadata.
 	 * @returns {Promise<Object>} - A promise resolving to the metadata object for the specified S3 object.
