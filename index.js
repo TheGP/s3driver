@@ -1,10 +1,17 @@
 const
 	fs = require('fs'),
 	AWS = require('aws-sdk'),
-	filetype = require('file-type'),
 	mimetypes = require('mime-types'),
-	{default: PQueue} = require('p-queue'),
+	//PQueue = require('p-queue'),
 	os = require('os');
+
+let fileTypeFromFile, PQueue;
+import('file-type').then((fileTypeModule) => {
+	fileTypeFromFile = fileTypeModule.fileTypeFromFile;
+});  
+import('p-queue').then((pQueueModule) => {
+	PQueue = pQueueModule.default || pQueueModule;
+});
 
 
 module.exports = class s3driver {
@@ -507,7 +514,7 @@ module.exports = class s3driver {
 
 		if (!mime) {
 			// this one works for images and videos but not on .js/.json etc
-			let res = await filetype.fromFile(from);
+			let res = await fileTypeFromFile(from);
 
 			if (res) {
 				mime = res.mime;

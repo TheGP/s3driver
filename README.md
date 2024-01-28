@@ -12,15 +12,13 @@ This Node.js module provides a flexible AWS S3 driver for handling file uploads,
 # Installation
 
 ```
-git clone https://github.com/TheGP/s3driver
-cd s3driver
-npm install
+npm i s3driver
 ```
 
 # Example
 ```
-const 
-	remote = require('./s3driver'),
+const s3driver = require('s3driver');
+const remote = new s3driver();
 
 remote.config({
     accessKeyId: 'AWG7P3D8VX5Z9F21L6QC',
@@ -29,7 +27,9 @@ remote.config({
     bucket: 'bucket-name',
 });
 
-console.log(await remote.list(dir));
+(async () => {
+    console.log(await remote.list('test'));
+})();
 ```
 
 # Methods
