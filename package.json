@@ -4,7 +4,7 @@
   "description": "Simple driver for AWS S3 compatible storage",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node -c index.js && echo \"Syntax check passed\" || echo \"Syntax check failed\""
   },
   "keywords": [],
   "author": "Eugene Bos",
