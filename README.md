@@ -4,9 +4,9 @@ This Node.js module provides a flexible AWS S3 driver for handling file uploads,
 
 # Features
 
-* Upload: Upload files and directories to AWS S3.
-* Download: Download files and directories from AWS S3.
-* Delete: Delete files and directories from AWS S3.
+* Upload: Upload files and directories to S3.
+* Download: Download files and directories from S3.
+* Delete: Delete files and directories from S3.
 * List: List objects in an S3 directory with optional metadata.
 
 # Installation
@@ -61,7 +61,7 @@ console.log(await remote.list(dir));
     Uploads a directory from one S3 bucket to another (can be in a different cloud, using current temp dir as intermediary), skips empty dirs.  
     Can handle subdirectories, overwrite existing files, and check for modifications.
 
-	 * {Object} CONF - Configuration for the another AWS S3 connection.
+	 * {Object} CONF - Configuration for the another S3 connection.
 	 * {string} dir - Local directory path to upload.
 	 * {string} [prefix=''] - Prefix to add to S3 object keys.
 	 * {Object} [params={}] - Additional parameters for customization.
