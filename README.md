@@ -6,8 +6,10 @@ This Node.js module provides a flexible AWS S3 driver for handling file uploads,
 
 * Upload: Upload files and directories to S3.
 * Download: Download files and directories from S3.
+* Cloud transfer: Transfer files from one storage to another.
 * Delete: Delete files and directories from S3.
 * List: List objects in an S3 directory with optional metadata.
+* Meta data: Get files' metadata
 
 # Installation
 

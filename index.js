@@ -79,9 +79,6 @@ module.exports = class s3driver {
 			delete params.files_concurrency;
 		}
 
-
-		//for (let i = 0; i <= 20; i++) this.upload('./test-files/test copy 85.js', 'lambda8/test copy 85.js').then(console.log); return;
-
 		// adding trailing slash to add deeper path in the future
 		if (!dir.endsWith('/')) dir += '/';
 		// removing first slash, if exists
@@ -90,10 +87,8 @@ module.exports = class s3driver {
 		let files_remote = await this.list(prefix, true);
 		let files = fs.readdirSync(dir, { withFileTypes: true });
 
-
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
-
 		for (let file of files) {
 
 			if (file.isDirectory()) {
@@ -137,7 +132,6 @@ module.exports = class s3driver {
 								debug('UNpausing dir queue');
 							}
 
-
 						}, {priority : 1}); // maximum priority for file uploads
 				}
 			}
@@ -153,10 +147,6 @@ module.exports = class s3driver {
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
 		return true;
 	}
-
-
-
-
 
 	/**
 	 * Uploads a directory from a cloud to cloud (using current temp dir as intermediary), skips empty dirs
@@ -219,7 +209,6 @@ module.exports = class s3driver {
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
-
 		for (let file of files) {
 
 			if (file.is_dir) {
@@ -273,7 +262,6 @@ module.exports = class s3driver {
 								debug('UNpausing dir queue');
 							}
 
-
 						}, {priority : 1}); // maximum priority for file uploads
 				}
 			}
@@ -289,8 +277,6 @@ module.exports = class s3driver {
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
 		return true;
 	}
-
-
 
 	/**
 	 * Downloads a directory from S3, including subdirectories and files, skips empty dirs
@@ -345,7 +331,6 @@ module.exports = class s3driver {
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
-
 		for (let file of files) {
 
 			if (file.is_dir) {
@@ -410,11 +395,6 @@ module.exports = class s3driver {
 		return true;
 	}
 
-
-
-
-
-
 	/**
 	 * Uploads a directory to S3, including subdirectories and files, skips empty dirs, slower version, waits till all files in dir will be uploaded and then goes to next dir
 	 * Skips empty directories and follows a slower version that waits until
@@ -427,8 +407,6 @@ module.exports = class s3driver {
 	 */
 	async uploadDir2(dir, prefix = '', acl = 'public-read', overwrite = false) {
 		debug('uploadDir', dir, prefix);
-
-		//for (let i = 0; i <= 20; i++) this.upload('./test-files/test copy 85.js', 'lambda8/test copy 85.js').then(console.log); return;
 
 		if (null === this.queue) {
 			this.queue = new PQueue({concurrency: 1});
@@ -445,10 +423,8 @@ module.exports = class s3driver {
 		let queue_files = new PQueue({concurrency: 50});
 		let queue_files_filled = false;
 
-
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
-
 		for (let file of files) {
 
 			if (file.isDirectory()) {
@@ -537,7 +513,6 @@ module.exports = class s3driver {
 	    	params.ContentType = mime;
 	    }
 
-
 	    return new Promise((resolve, reject) => {
 	        this.s3.upload(params, async function (err, data) {
 	            readStream.destroy();
@@ -598,7 +573,6 @@ module.exports = class s3driver {
 	    });
 	}
 
-	// rm
 	/**
 	 * Deletes a file from S3.
 	 * @param {string} file - S3 object key to delete.
@@ -642,7 +616,6 @@ module.exports = class s3driver {
 	    });
 	}
 
-
 	/**
 	 * Deletes all objects in a specified directory from S3.
 	 * @param {string} path - S3 directory path to delete.
@@ -665,9 +638,6 @@ module.exports = class s3driver {
 		return Promise.allSettled(promises);
 	}
 
-
-
-	// ls
 	/**
 	 * Lists objects in a specified S3 directory, by default only file names array without metadata
 	 * @param {string} path - S3 directory path to list.
@@ -708,9 +678,7 @@ module.exports = class s3driver {
 		return metaData;
 	}
 
-
 	// PRIVATE
-
 	listAllKeys(params, out = [], full_data = false) {
 		return new Promise((resolve, reject) => {
 		  this.s3.listObjectsV2(params).promise()
@@ -779,7 +747,3 @@ module.exports = class s3driver {
 
 	} 
 }
-
-
-
-
