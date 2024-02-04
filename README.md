@@ -32,7 +32,7 @@ remote.config({
 (async () => {
 	await remote.uploadDir('./test-dir', 'test-dir/');
 	console.log('Files:', await remote.list('test-dir'));
-    await remote.deleteDir('s3driver-test-dir');
+	await remote.deleteDir('s3driver-test-dir');
 })();
 ```
 # Turn on debug messages
