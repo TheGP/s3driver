@@ -9,7 +9,7 @@ This Node.js module provides a flexible AWS S3 driver for handling file uploads,
 * Cloud transfer: Transfer files from one storage to another.
 * Delete: Delete files and directories from S3.
 * List: List objects in an S3 directory with optional metadata.
-* Meta data: Get files' metadata
+* Meta data: Get files' metadata.
 
 # Installation
 
@@ -30,7 +30,9 @@ remote.config({
 });
 
 (async () => {
-    console.log(await remote.list('test'));
+	await remote.uploadDir('./test-dir', 'test-dir/');
+    console.log('Files:', await remote.list('test-dir'));
+    await remote.deleteDir('s3driver-test-dir');
 })();
 ```
 # Turn on debug messages
