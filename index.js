@@ -6,14 +6,13 @@ const
 	os = require('os'),
 	debug = require('debug')('s3driver');
 
-let fileTypeFromFile, PQueue;
+let 
+	fileTypeFromFile, 
+	PQueue;
+
 import('file-type').then((fileTypeModule) => {
 	fileTypeFromFile = fileTypeModule.fileTypeFromFile;
 });  
-import('p-queue').then((pQueueModule) => {
-	PQueue = pQueueModule.default || pQueueModule;
-});
-
 
 module.exports = class s3driver {
 
@@ -26,6 +25,10 @@ module.exports = class s3driver {
 		this.queue_dirs = null;
 		this.queue_files = null;
 		this.queue = null; // old uploadDir2
+
+		(async () => {
+			PQueue = (await import('p-queue')).default;
+		})();
 	}
 
 	/**
@@ -35,7 +38,6 @@ module.exports = class s3driver {
 	config(config) {
 		this.s3 = new AWS.S3(config);
 		this.bucket = config.bucket;
-	    return;
 	}
 
   	/**
@@ -52,6 +54,10 @@ module.exports = class s3driver {
 	 */
 	async uploadDir(dir, prefix = '', params = {}) {
 		debug('uploadDir', dir, prefix);
+
+		if ('undefined' === typeof PQueue) {
+			PQueue = (await import('p-queue')).default;
+		}
 
 		let
 			overwrite = false,
@@ -86,6 +92,7 @@ module.exports = class s3driver {
 
 		let files_remote = await this.list(prefix, true);
 		let files = fs.readdirSync(dir, { withFileTypes: true });
+		debug('files to upload:', files);
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
@@ -163,6 +170,10 @@ module.exports = class s3driver {
 	 */
 	async uploadDirCloud(CONF, dir, prefix = '', params = {}) {
 		debug('uploadDir', dir, prefix);
+
+		if ('undefined' === typeof PQueue) {
+			PQueue = (await import('p-queue')).default;
+		}
 
 		const remote_from = new (require('./'));
 		remote_from.config(CONF);
@@ -293,6 +304,9 @@ module.exports = class s3driver {
 	 */
 	async downloadDir(prefix = '', dir, params = {}) {
 		debug('downloadDir', dir, prefix);
+		if ('undefined' === typeof PQueue) {
+			PQueue = (await import('p-queue')).default;
+		}
 
 		fs.mkdirSync(dir, { recursive: true });
 
@@ -407,7 +421,6 @@ module.exports = class s3driver {
 	 */
 	async uploadDir2(dir, prefix = '', acl = 'public-read', overwrite = false) {
 		debug('uploadDir', dir, prefix);
-
 		if (null === this.queue) {
 			this.queue = new PQueue({concurrency: 1});
 		}
