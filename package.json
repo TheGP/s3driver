@@ -6,7 +6,15 @@
   "scripts": {
     "test": "node -c index.js && echo \"Syntax check passed\" || echo \"Syntax check failed\""
   },
-  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:TheGP/s3driver.git"
+  },
+  "keywords": [
+    "driver",
+    "s3",
+    "filesystem"
+  ],
   "author": "Eugene Bos",
   "license": "MIT",
   "dependencies": {

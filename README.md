@@ -23,13 +23,21 @@ const remote = new s3driver();
 remote.config({
     accessKeyId: 'AWG7P3D8VX5Z9F21L6QC',
     secretAccessKey: 'sX9KpR4HjQ8UyL3oB6ZvA2DcP1F5TtG7IiJ2R8JqD3L4O9P2L7E8',
-    endpoint: 'https://ams3.digitaloceanspaces.com',
+    endpoint: 'ams3.digitaloceanspaces.com',
     bucket: 'bucket-name',
 });
 
 (async () => {
     console.log(await remote.list('test'));
 })();
+```
+# Turn on debug messages
+For debugging messages I'm using [debug](https://www.npmjs.com/package/debug)
+```
+# bash shell
+DEBUG=s3driver node app.js
+# fish shell
+env DEBUG=s3driver node app.js
 ```
 
 # Methods
@@ -128,3 +136,8 @@ remote.config({
     Retrieves metadata for a specified S3 object.
 	 * {string} key - S3 object key for which to retrieve metadata.
 	 * @returns {Promise<Object>} - A promise resolving to the metadata object for the specified S3 object.
+
+
+# Conslusions
+
+This is my first package on NPM, if you have any comments, ideas or suggestings feel free to open issue on GitHub: [https://github.com/TheGP/s3driver](https://github.com/TheGP/s3driver)
