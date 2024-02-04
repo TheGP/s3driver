@@ -13,12 +13,12 @@ This Node.js module provides a flexible AWS S3 driver for handling file uploads,
 
 # Installation
 
-```
+```bash
 npm i s3driver
 ```
 
 # Example
-```
+```js
 const s3driver = require('s3driver');
 const remote = new s3driver();
 
@@ -31,13 +31,13 @@ remote.config({
 
 (async () => {
 	await remote.uploadDir('./test-dir', 'test-dir/');
-    console.log('Files:', await remote.list('test-dir'));
+	console.log('Files:', await remote.list('test-dir'));
     await remote.deleteDir('s3driver-test-dir');
 })();
 ```
 # Turn on debug messages
 For debugging messages I'm using [debug](https://www.npmjs.com/package/debug)
-```
+```bash
 # bash shell
 DEBUG=s3driver node app.js
 # fish shell
