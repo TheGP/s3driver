@@ -3,7 +3,8 @@ const
 	AWS = require('aws-sdk'),
 	mimetypes = require('mime-types'),
 	//PQueue = require('p-queue'),
-	os = require('os');
+	os = require('os'),
+	debug = require('debug')('s3driver');
 
 let fileTypeFromFile, PQueue;
 import('file-type').then((fileTypeModule) => {
@@ -50,7 +51,7 @@ module.exports = class s3driver {
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
 	async uploadDir(dir, prefix = '', params = {}) {
-		console.log('uploadDir', dir, prefix);
+		debug('uploadDir', dir, prefix);
 
 		let
 			overwrite = false,
@@ -133,7 +134,7 @@ module.exports = class s3driver {
 							// if dir queue have been paused - unpausing if files queue became smaller
 							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
 								this.queue_dirs.start();
-								console.log('UNpausing dir queue');
+								debug('UNpausing dir queue');
 							}
 
 
@@ -143,10 +144,10 @@ module.exports = class s3driver {
 		}
 		
 		// if files queue 3 times bigger than in settings - pausing dirs queue so it wont eat too much memory
-		console.log(this.queue_files.size);
+		debug('queue_files.size', this.queue_files.size);
 		if (3 * this.files_concurrency < this.queue_files.size) {
 			this.queue_dirs.pause();
-			console.log('Pausing dir queue');
+			debug('Pausing dir queue');
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
@@ -171,7 +172,7 @@ module.exports = class s3driver {
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
 	async uploadDirCloud(CONF, dir, prefix = '', params = {}) {
-		console.log('uploadDir', dir, prefix);
+		debug('uploadDir', dir, prefix);
 
 		const remote_from = new (require('./'));
 		remote_from.config(CONF);
@@ -214,7 +215,7 @@ module.exports = class s3driver {
 		let files_remote = await this.list(prefix, true);
 		//let files = fs.readdirSync(dir, { withFileTypes: true });
 		let files = await remote_from.list(dir, true);
-		console.log(files_remote);
+		debug('files_remote', files_remote);
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
@@ -242,9 +243,9 @@ module.exports = class s3driver {
 						upload_or_not = false;
 						//let stats = fs.statSync(dir + file.name);
 						//console.log(stats);
-						console.log(file_remote);
+						debug('file_remote', file_remote);
 						if (undefined === file_remote || new Date(file.mtime) > new Date(file_remote.mtime)) {
-							console.log('MODIFIED!', file.name);
+							debug('MODIFIED!', file.name);
 							upload_or_not = true;
 						}
 					}
@@ -252,24 +253,24 @@ module.exports = class s3driver {
 					//console.log('queue_files');
 					if (upload_or_not)
 						this.queue_files.add(async () => {
-							console.log('upload', dir + file.name, prefix + file.name);
+							debug('upload', dir + file.name, prefix + file.name);
+							debug('download', dir + file.name, os.tmpdir() + '/' + file.name);
 
-							console.log('download', dir + file.name, os.tmpdir() + '/' + file.name);
 							await remote_from.download(dir + file.name, os.tmpdir() + '/' + file.name);
 
 							if (!fs.existsSync(os.tmpdir() + '/' + file.name)) {
 								throw new Error('NO FILE ' + dir + file.name + ' ' + os.tmpdir() + '/' + file.name);
 							}
-							console.log('downloaded');
+							debug('downloaded');
 
 							await this.upload(os.tmpdir() + '/' + file.name, prefix + file.name, acl);
-							console.log('uploaded');
+							debug('uploaded');
 							fs.unlinkSync(os.tmpdir() + '/' + file.name);
 
 							// if dir queue have been paused - unpausing if files queue became smaller
 							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
 								this.queue_dirs.start();
-								console.log('UNpausing dir queue');
+								debug('UNpausing dir queue');
 							}
 
 
@@ -279,10 +280,10 @@ module.exports = class s3driver {
 		}
 		
 		// If files queue 3 times bigger than in settings - pausing dirs queue so it wont eat too much memory
-		console.log(this.queue_files.size);
+		debug('queue_files.size', this.queue_files.size);
 		if (3 * this.files_concurrency < this.queue_files.size) {
 			this.queue_dirs.pause();
-			console.log('Pausing dir queue');
+			debug('Pausing dir queue');
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
@@ -305,7 +306,7 @@ module.exports = class s3driver {
 	 * @returns {Promise<boolean>} - A promise resolving to true if the download is successful.
 	 */
 	async downloadDir(prefix = '', dir, params = {}) {
-		console.log('downloadDir', dir, prefix);
+		debug('downloadDir', dir, prefix);
 
 		fs.mkdirSync(dir, { recursive: true });
 
@@ -371,7 +372,7 @@ module.exports = class s3driver {
 						//console.log(stats);
 
 						if (!local_file_exists || new Date(file.mtime) > new Date(stats.mtime)) {
-							console.log('MODIFIED!', file.name);
+							debug('MODIFIED!', file.name);
 							upload_or_not = true;
 						}
 					}
@@ -380,7 +381,7 @@ module.exports = class s3driver {
 					if (upload_or_not)
 						this.queue_files.add(async () => {
 							//console.log(os.tmpdir());
-							console.log('download', prefix + file.name, dir + '/' + file.name);
+							debug('download', prefix + file.name, dir + '/' + file.name);
 							await this.download(prefix + file.name, dir + '/' + file.name);
 
 							if (!fs.existsSync(dir + '/' + file.name)) {
@@ -390,7 +391,7 @@ module.exports = class s3driver {
 							// if dir queue have been paused - unpausing if files queue became smaller
 							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
 								this.queue_dirs.start();
-								console.log('UNpausing dir queue');
+								debug('UNpausing dir queue');
 							}
 
 						}, {priority : 1}); // Maximum priority for file uploads
@@ -399,10 +400,10 @@ module.exports = class s3driver {
 		}
 		
 		// if files queue 3 times bigger than in settings - pausing dirs queue so it wont eat too much memory
-		console.log(this.queue_files.size);
+		debug('queue_files.size', this.queue_files.size);
 		if (3 * this.files_concurrency < this.queue_files.size) {
 			this.queue_dirs.pause();
-			console.log('Pausing dir queue');
+			debug('Pausing dir queue');
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
@@ -425,7 +426,7 @@ module.exports = class s3driver {
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
 	async uploadDir2(dir, prefix = '', acl = 'public-read', overwrite = false) {
-		console.log('uploadDir', dir, prefix);
+		debug('uploadDir', dir, prefix);
 
 		//for (let i = 0; i <= 20; i++) this.upload('./test-files/test copy 85.js', 'lambda8/test copy 85.js').then(console.log); return;
 
@@ -505,7 +506,7 @@ module.exports = class s3driver {
 	 * @returns {Promise} - A promise resolving when the upload is complete.
 	 */
 	async upload(from, to, acl = 'public-read', attempt = 0, cb) {
-		if (attempt) console.log(attempt);
+		if (attempt) debug('attempt', attempt);
 	    let self = this;
 
 		// getting mime
@@ -543,10 +544,10 @@ module.exports = class s3driver {
 	            if (err) {
 	            	//console.log('err code:', err.code, 'err:', err, 'data:', data);
 
-	            	console.log('retrying upload');
+	            	debug('retrying upload');
 
 	            	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	            		console.log('Received SlowDown error. Retrying in 1 sec...');
+	            		debug('Received SlowDown error. Retrying in 1 sec...');
 
 	            		setTimeout(() => {
 
@@ -556,7 +557,7 @@ module.exports = class s3driver {
 	            		}, 1000);
 	            	} else {
 	            		if (3 > attempt) {
-	            			console.log('after trying 3 times upload failed', err);
+	            			debug('after trying 3 times upload failed', err);
 	            			reject(false);
 	            		} else {
 	            			this.upload(from, to, acl, ++attempt, resolve);
@@ -614,10 +615,10 @@ module.exports = class s3driver {
 	    return new Promise((resolve, reject) => {
 			this.s3.deleteObject(params, function(err, data) {
 				if (err) {
-					console.log(err, err.stack);  // error
+					debug(err, err.stack);  // error
 
 	            	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	            		console.log('Received SlowDown error. Retrying in 2 sec...');
+	            		debug('Received SlowDown error. Retrying in 2 sec...');
 
 	            		setTimeout(() => {
 
@@ -626,7 +627,7 @@ module.exports = class s3driver {
 	            		}, 2000);
 	            	} else {
 	            		if (13 > attempt) {
-	            			console.log('after trying 13 times "delete" failed', err);
+	            			debug('after trying 13 times "delete" failed', err);
 	            			reject(false);
 	            		} else {
 	            			resolve(this.delete(path, ++attempt));
@@ -657,7 +658,7 @@ module.exports = class s3driver {
 
 		let promises = [];
 		for (let file of files) {
-			console.log('Removing', path + file);
+			debug('Removing', path + file);
 			promises.push(this.delete(path + file));
 		}
 
@@ -702,7 +703,7 @@ module.exports = class s3driver {
 			Key: key,
 		}
 		const metaData = await this.s3.headObject(params).promise();
-		console.log(metaData);
+		debug(metaData);
 
 		return metaData;
 	}
@@ -763,7 +764,7 @@ module.exports = class s3driver {
 		    })
 		    .catch((err) => {
 	        	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	        		console.log('Received SlowDown error. Retrying in 1 sec...');
+	        		debug('Received SlowDown error. Retrying in 1 sec...');
 
 	        		setTimeout(() => {
 		    			resolve(this.listAllKeys(params, out, full_data));
@@ -772,7 +773,7 @@ module.exports = class s3driver {
 	        		reject(err);
 	        	}
 
-		    	console.log('ERROR', err);
+		    	debug('ERROR', err);
 		    });
 		});
 

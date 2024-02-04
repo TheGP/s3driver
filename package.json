@@ -1,6 +1,6 @@
 {
   "name": "s3driver",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Simple driver for AWS S3 compatible storage",
   "main": "index.js",
   "scripts": {
@@ -19,6 +19,7 @@
   "license": "MIT",
   "dependencies": {
     "aws-sdk": "^2.1545.0",
+    "debug": "^4.3.4",
     "file-type": "^19.0.0",
     "mime-types": "^2.1.35",
     "p-queue": "^8.0.1",
