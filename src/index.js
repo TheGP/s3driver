@@ -185,7 +185,7 @@ export default class s3driver {
 			PQueue = (await import('p-queue')).default;
 		}
 
-		const remote_from = new (require('./'));
+		const remote_from = new s3driver;
 		remote_from.config(CONF);
 		//await remote_from.download('/fc42b21790b0dd77e26b.js', '/var/folders/rr/q_0tgkkn4299bwpz8xsl17m00000gn/T/fc42b21790b0dd77e26b.js');
 		//console.log(remote_from);
