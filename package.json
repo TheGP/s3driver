@@ -3,8 +3,10 @@
   "version": "1.0.52",
   "description": "Simple driver for AWS S3 compatible storage",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "node -c index.js && echo \"Syntax check passed\" || echo \"Syntax check failed\""
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
   },
   "repository": {
     "type": "git",
@@ -24,5 +26,10 @@
     "mime-types": "^2.1.35",
     "p-queue": "^8.0.1",
     "promise-queue": "^2.2.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-cli": "^29.7.0",
+    "jest-serial-runner": "^1.2.1"
   }
 }

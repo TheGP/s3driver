@@ -142,6 +142,19 @@ env DEBUG=s3driver node app.js
 	 * @returns {Promise<Object>} - A promise resolving to the metadata object for the specified S3 object.
 
 
-# Conslusions
+# Testing
+
+Create file `jestEnv.js` in the package folder with connection data:
+
+```
+process.env.ACCESS_KEY_ID="D100QEKD9WY474WRY76C"
+process.env.SECRET_ACCESS_KEY="kzHf79O0xI/Q5Gx2M91NJuCrYM6m21l5/Xk46E77oK1"
+process.env.ENDPOINT="fra1.digitaloceanspaces.com"
+process.env.BUCKET="testbucket"
+```
+
+Can run it with `npm run test`
+
+# Conslusion
 
 This is my first package on NPM, if you have any comments, ideas or suggestings feel free to open issue on GitHub: [https://github.com/TheGP/s3driver](https://github.com/TheGP/s3driver)

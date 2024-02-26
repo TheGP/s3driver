@@ -1,10 +1,9 @@
-const
-	fs = require('fs'),
-	AWS = require('aws-sdk'),
-	mimetypes = require('mime-types'),
-	//PQueue = require('p-queue'),
-	os = require('os'),
-	debug = require('debug')('s3driver');
+import fs from 'fs';
+import AWS from 'aws-sdk';
+import mimetypes from 'mime-types';
+import os from 'os';
+import Debug from 'debug';
+const debug = Debug('s3driver');
 
 let 
 	fileTypeFromFile, 
@@ -14,7 +13,7 @@ import('file-type').then((fileTypeModule) => {
 	fileTypeFromFile = fileTypeModule.fileTypeFromFile;
 });  
 
-module.exports = class s3driver {
+export default class s3driver {
 
 	constructor() {
 		this.s3 = null;
@@ -101,7 +100,7 @@ module.exports = class s3driver {
 			if (file.isDirectory()) {
 				//console.log('uploadDir', dir, file.name, prefix, file.name);
 
-				this.queue_dirs.add(() => {
+				await this.queue_dirs.add(() => {
 					return this.uploadDir(dir + file.name, prefix + file.name + '/', params);
 				}, {priority : 0});
 
@@ -152,7 +151,18 @@ module.exports = class s3driver {
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
-		return true;
+		// Wait for both promises to resolve
+		return Promise.all([this.queue_dirs.onIdle(), this.queue_files.onIdle()])
+			.then(() => {
+				// Both queues have finished their tasks
+				debug("Both dir and files queus are finished.");
+				return true;
+			})
+			.catch((error) => {
+				// Handle errors if any of the promises reject
+				console.error("Error while waiting for queues to finish:", error);
+				return false;
+			});
 	}
 
 	/**
@@ -350,7 +360,7 @@ module.exports = class s3driver {
 			if (file.is_dir) {
 				//console.log('uploadDir', dir, file.name, prefix, file.name);
 
-				this.queue_dirs.add(() => {
+				this.queue_dirs.add(async () => {
 					return this.downloadDir(prefix + file.name + '/', dir + file.name, params);
 				}, {priority : 0});
 
@@ -376,14 +386,15 @@ module.exports = class s3driver {
 						}
 					}
 
-					//console.log('queue_files');
+					debug('upload_or_not =', upload_or_not);
 					if (upload_or_not)
 						this.queue_files.add(async () => {
 							//console.log(os.tmpdir());
-							debug('download', prefix + file.name, dir + '/' + file.name);
-							await this.download(prefix + file.name, dir + '/' + file.name);
+							debug('download', prefix + '/' + file.name, dir + file.name);
+							await this.download(prefix + '/' + file.name, dir + file.name);
 
-							if (!fs.existsSync(dir + '/' + file.name)) {
+							debug('File exists', dir + file.name, fs.existsSync(dir + file.name));
+							if (!fs.existsSync(dir + file.name)) {
 								throw new Error('NO FILE ' + prefix + file.name + ' ' + dir + '/' + file.name);
 							}
 
@@ -406,7 +417,18 @@ module.exports = class s3driver {
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
-		return true;
+		// Wait for both promises to resolve
+		return Promise.all([this.queue_dirs.onIdle(), this.queue_files.onIdle()])
+			.then(() => {
+				// Both queues have finished their tasks
+				debug("Both dir and files queus are finished.");
+				return true;
+			})
+			.catch((error) => {
+				// Handle errors if any of the promises reject
+				debug("Error while waiting for queues to finish:", error);
+				return JSON.stringify(error);
+			});
 	}
 
 	/**
@@ -569,20 +591,20 @@ module.exports = class s3driver {
 	 * @returns {Promise<string|boolean>} - A promise resolving to the local file path if successful, or false on failure.
 	 */
 	download(from, to) {
-
 	    const params = {
 	        Bucket: this.bucket,
 	        Key: from,
 	    };
-	    return new Promise((resolve, reject) => {
-	        this.s3.getObject(params, function (err, data) {
-	            if (err) {
-	                return reject(false);// reject(err);
-	            } else {
-	            	fs.writeFileSync(to, data.Body);
-	            }
-	            return resolve(to);
-	        });
+		debug('download method called with', params);
+	    return new Promise(async (resolve, reject) => {
+			try {
+				const data = await this.s3.getObject(params).promise();
+				fs.writeFileSync(to, data.Body);
+				resolve(to);
+			} catch (e) {
+				debug(e);
+				reject(e);
+			}
 	    });
 	}
 
@@ -648,7 +670,11 @@ module.exports = class s3driver {
 			promises.push(this.delete(path + file));
 		}
 
-		return Promise.allSettled(promises);
+		return Promise.allSettled(promises).then(results => {
+			return true
+		}).catch((err) => {
+			return err;
+		});
 	}
 
 	/**

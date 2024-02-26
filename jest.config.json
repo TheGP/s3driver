@@ -1,0 +1,4 @@
+{
+    "runner": "jest-serial-runner",
+    "setupFiles": ["<rootDir>/jestEnv.js"]
+}
