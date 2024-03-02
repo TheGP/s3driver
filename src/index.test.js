@@ -77,7 +77,14 @@ describe('s3driver', () => {
 		// Check if the downloaded directory contains the expected files
 		const downloadedFiles = fs.readdirSync(localDownloadPath);
 		expect(downloadedFiles).toEqual(['test1.txt', 'test2.txt']);
-	}, 20000);
+
+        // Check the content of each downloaded file
+        const file1Content = fs.readFileSync(path.join(localDownloadPath, 'test1.txt'), 'utf-8');
+        expect(file1Content).toEqual('test1.txt');
+        const file2Content = fs.readFileSync(path.join(localDownloadPath, 'test2.txt'), 'utf-8');
+        expect(file2Content).toEqual('test2.txt');
+
+	}, 30000);
 
     test.only('should delete a file from the uploaded directory', async () => {
         // Delete the file from S3
