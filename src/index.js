@@ -1,5 +1,6 @@
 import fs from 'fs';
-import AWS from 'aws-sdk';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+
 import mimetypes from 'mime-types';
 import os from 'os';
 import Debug from 'debug';
@@ -35,7 +36,18 @@ export default class s3driver {
 	 * @param {Object} config - S3 configuration object.
 	 */
 	config(config) {
-		this.s3 = new AWS.S3(config);
+		this.s3 = new S3Client({
+			...config,
+			credentials: {
+				accessKeyId: config.accessKeyId,
+				secretAccessKey: config.secretAccessKey,
+			},
+			...(config.endpoint && {
+				endpoint: config.endpoint.startsWith("https://") || config.endpoint.startsWith("http://")
+				  ? config.endpoint
+				  : `https://${config.endpoint}`
+			})
+		});
 		this.bucket = config.bucket;
 	}
 
@@ -548,40 +560,31 @@ export default class s3driver {
 	    	params.ContentType = mime;
 	    }
 
-	    return new Promise((resolve, reject) => {
-	        this.s3.upload(params, async function (err, data) {
-	            readStream.destroy();
-	            if (err) {
-	            	//console.log('err code:', err.code, 'err:', err, 'data:', data);
-
-	            	debug('retrying upload');
-
-	            	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	            		debug('Received SlowDown error. Retrying in 1 sec...');
-
-	            		setTimeout(() => {
-
-	            			self.upload(from, to, acl, ++attempt, resolve);
-	            			
-
-	            		}, 1000);
-	            	} else {
-	            		if (3 > attempt) {
-	            			debug('after trying 3 times upload failed', err);
-	            			reject(false);
-	            		} else {
-	            			this.upload(from, to, acl, ++attempt, resolve);
-	            		}
-	            	}
-
-	            	//resolve(data);
-	                //return reject(err);
-	            } else {
-	            	if ('function' == typeof cb) cb(data);
-	           		resolve(data);
-	            }
-	        });
-	    });
+		return new Promise((resolve, reject) => {
+			this.s3.send(new PutObjectCommand(params))
+				.then(data => {
+					readStream.destroy();
+					if (typeof cb === 'function') cb(data);
+					resolve(data);
+				})
+				.catch(err => {
+					readStream.destroy();
+					debug('Error uploading file:', err);
+					if (err.name === 'SlowDown' || err.statusCode === 503) {
+						debug('Received SlowDown error. Retrying in 1 sec...');
+						if (attempt < 3) {
+							setTimeout(() => {
+								resolve(this.upload(from, to, acl, ++attempt, resolve));
+							}, 1000);
+						} else {
+							debug('After trying 3 times upload failed');
+							reject(err);
+						}
+					} else {
+						reject(err);
+					}
+				});
+		});
 	}
 
 	/**
@@ -598,9 +601,25 @@ export default class s3driver {
 		debug('download method called with', params);
 	    return new Promise(async (resolve, reject) => {
 			try {
-				const data = await this.s3.getObject(params).promise();
-				fs.writeFileSync(to, data.Body);
-				resolve(to);
+				const data = await this.s3.send(new GetObjectCommand(params));
+				//fs.writeFileSync(to, data.Body);
+
+				const writableStream = fs.createWriteStream(to)
+				data.Body.pipe(writableStream);
+		
+				// Wait for the writable stream to finish writing the data to the file
+				debug('waiting for stream to finish', to)
+
+				try {
+					await new Promise((resolve, reject) => {
+						writableStream.on('finish', resolve);
+						writableStream.on('error', error => reject(error.message));
+					});
+					resolve(to);
+				} catch (e) {
+					reject(e);
+				}
+
 			} catch (e) {
 				debug(e);
 				reject(e);
@@ -613,7 +632,7 @@ export default class s3driver {
 	 * @param {string} file - S3 object key to delete.
 	 * @returns {Promise<string|boolean>} - A promise resolving to the deleted object key if successful, or false on failure.
 	 */
-	delete(path, attempt = 0) {
+	async delete(path, attempt = 0) {
 
 	    let self = this;
 
@@ -621,34 +640,24 @@ export default class s3driver {
 	        Bucket: this.bucket,
 	        Key: path,
 	    };
-	    return new Promise((resolve, reject) => {
-			this.s3.deleteObject(params, function(err, data) {
-				if (err) {
-					debug(err, err.stack);  // error
-
-	            	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	            		debug('Received SlowDown error. Retrying in 2 sec...');
-
-	            		setTimeout(() => {
-
-	            			resolve(self.delete(path, ++attempt));
-	        
-	            		}, 2000);
-	            	} else {
-	            		if (13 > attempt) {
-	            			debug('after trying 13 times "delete" failed', err);
-	            			reject(false);
-	            		} else {
-	            			resolve(this.delete(path, ++attempt));
-	            		}
-	            	}
-
-					//return resolve(false);
+		try {
+			await this.s3.send(new DeleteObjectCommand(params));
+			return path;
+		} catch (err) {
+			console.error(err);
+			if ('SlowDown' == err.name || (err.$metadata && err.$metadata.httpStatusCode === 503)) {
+				console.debug('Received SlowDown error. Retrying in 2 sec...');
+				if (attempt < 13) {
+					await new Promise(resolve => setTimeout(resolve, 2000));
+					return await this.delete(path, ++attempt); // <-----
 				} else {
-					return resolve(path);
+					console.debug('After trying 13 times "delete" failed', err);
+					throw err;
 				}
-			});
-	    });
+			} else {
+				throw err;
+			}
+		}
 	}
 
 	/**
@@ -718,71 +727,60 @@ export default class s3driver {
 	}
 
 	// PRIVATE
-	listAllKeys(params, out = [], full_data = false) {
-		return new Promise((resolve, reject) => {
-		  this.s3.listObjectsV2(params).promise()
-		    .then(({Contents, CommonPrefixes, IsTruncated, NextContinuationToken}) => {
-		    	//console.log('CommonPrefixes', CommonPrefixes);
-
-		    	// thats for directories
-				for (let el of CommonPrefixes) {
-					// removing prefix from the name
-					let name = el.Prefix.replace( new RegExp('^(' + params.Prefix + ')', 'g'), '');
-					// removing slash in the end
-					name = name.replace(/\/$/, '');
-
+	async listAllKeys(params, out = [], full_data = false) {
+		try {
+			const response = await this.s3.send(new ListObjectsV2Command(params));
+			const { Contents, CommonPrefixes, IsTruncated, NextContinuationToken } = response;
+	
+			// Process directories
+			if (Array.isArray(CommonPrefixes))
+			for (const el of CommonPrefixes) {
+				let name = el.Prefix.replace(new RegExp('^(' + params.Prefix + ')', 'g'), '');
+				name = name.replace(/\/$/, '');
+	
+				if (full_data) {
+					out.push({
+						is_dir: true,
+						name: name,
+					});
+				} else {
+					out.push(name);
+				}
+			}
+	
+			// Process files
+			if (Array.isArray(Contents))
+			for (const el of Contents) {
+				let name = el.Key.replace(new RegExp('^(' + params.Prefix + ')', 'g'), '');
+	
+				if (name) {
 					if (full_data) {
 						out.push({
-							is_dir : true,
-							name : name,
+							is_dir: false,
+							name: name,
+							mtime: el.LastModified,
+							size: el.Size,
 						});
 					} else {
 						out.push(name);
 					}
 				}
-				// thats for files
-				//console.log(Contents);
-				for (let el of Contents) {
-					//let name = el.Key.replace(params.Prefix, '');
-
-					// removing prefix from the name
-					let name = el.Key.replace( new RegExp('^(' + params.Prefix + ')', 'g'), '');
-
-					// if directory is empty it will be empty name, not adding
-					if (name) {
-						if (full_data) {
-							out.push({
-								is_dir : false,
-								name : name,
-								mtime : el.LastModified,
-								size : el.Size,
-								//etag : el.ETag,
-								//StorageClass : el.StorageClass,
-							});
-						} else {
-							out.push(name);
-						}
-					}
-				}
-
-				//return resolve(out);
-		    	//out.push(...Contents);
-		    	!IsTruncated ? resolve(out) : resolve(this.listAllKeys(Object.assign(params, {ContinuationToken: NextContinuationToken}), out, full_data));
-		    })
-		    .catch((err) => {
-	        	if ('SlowDown' == err.code || 503 == err.statusCode) {
-	        		debug('Received SlowDown error. Retrying in 1 sec...');
-
-	        		setTimeout(() => {
-		    			resolve(this.listAllKeys(params, out, full_data));
-	        		}, 1000);
-	        	} else {
-	        		reject(err);
-	        	}
-
-		    	debug('ERROR', err);
-		    });
-		});
-
-	} 
+			}
+	
+			// Recursive call if there are more objects
+			if (IsTruncated) {
+				return await this.listAllKeys(Object.assign(params, { ContinuationToken: NextContinuationToken }), out, full_data);
+			} else {
+				return out;
+			}
+		} catch (err) {
+			if (err.name === 'SlowDown' || err.$metadata?.httpStatusCode === 503) {
+				console.debug('Received SlowDown error. Retrying in 1 sec...');
+				await new Promise(resolve => setTimeout(resolve, 1000));
+				return await this.listAllKeys(params, out, full_data);
+			} else {
+				throw err;
+			}
+		}
+	}	
 }

@@ -21,7 +21,7 @@
   "author": "Eugene Bos",
   "license": "MIT",
   "dependencies": {
-    "aws-sdk": "^2.1545.0",
+    "@aws-sdk/client-s3": "^3.521.0",
     "debug": "^4.3.4",
     "file-type": "^19.0.0",
     "mime-types": "^2.1.35",
