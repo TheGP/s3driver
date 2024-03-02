@@ -101,7 +101,7 @@ describe('s3driver', () => {
 
     afterAll(() => {
         // Clean up: Remove test directory and files
-        fs.rmdirSync(__dirname + '/temp', { recursive: true });
+        fs.rmSync(__dirname + '/temp', { recursive: true });
         console.log('Test directory deleted successfully.');
     });
 });
