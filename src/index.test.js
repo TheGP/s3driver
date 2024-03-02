@@ -1,4 +1,4 @@
-import s3driver from './index.js';
+import s3driver from '../dist/index.js';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
