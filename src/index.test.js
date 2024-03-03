@@ -60,6 +60,19 @@ describe('s3driver', () => {
         expect(res).toEqual(['test1.txt', 'test2.txt']);
     }, 10000);
 
+    test.only('should get metadata of test1.txt', async () => {
+        // Get metadata of test1.txt from S3
+        const metaData = await s3.getMetaData('s3testdir/test1.txt');
+        
+        // Assert that metadata is returned
+        expect(metaData).toBeDefined();
+        
+        // Assert specific metadata properties if needed
+        expect(metaData.ContentLength).toBeGreaterThan(0);
+
+        // Check if metadata has '$metadata' field
+        expect('$metadata' in metaData).toBe(true);
+    }, 10000);
 
 	test.only('should download the uploaded directory', async () => {
 		// Define the local path where the directory will be downloaded
