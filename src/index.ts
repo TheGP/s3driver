@@ -1,3 +1,5 @@
+// ./node_modules/.bin/esbuild ./src/index.ts --format=esm --outfile=./dist/index.js --platform=node --target=node16.3 --minify
+
 import fs from 'fs';
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand, PutObjectCommandInput, ObjectCannedACL } from "@aws-sdk/client-s3";
 
@@ -61,7 +63,6 @@ export interface S3Driver {
 
     config: (config: S3Config) => void,
 }
-
 
 export default class s3driver implements S3Driver {
 	s3: S3Client | null = null;
