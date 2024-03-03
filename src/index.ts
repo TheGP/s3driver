@@ -1,4 +1,4 @@
-// ./node_modules/.bin/esbuild ./src/index.ts --format=esm --outfile=./dist/index.js --platform=node --target=node16.3 --minify
+// env DEBUG=s3driver npm run test
 
 import fs from 'fs';
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand, PutObjectCommandInput, ObjectCannedACL } from "@aws-sdk/client-s3";
@@ -241,7 +241,7 @@ export default class s3driver implements S3Driver {
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
 	async uploadDirCloud(CONF: S3Config, dir: string, prefix: string = '', params: TransferParams = {}) {
-		debug('uploadDir', dir, prefix);
+		debug('uploadDirCloud', dir, prefix, CONF);
 
 		/*
 		if ('undefined' === typeof PQueueClass) {
@@ -285,11 +285,13 @@ export default class s3driver implements S3Driver {
 		if (!dir.endsWith('/') && '' != dir) dir += '/';
 		// Removing the first slash, if it exists
 		prefix = prefix.replace(/^\//, '');
+		// Adding trailing slash
+		prefix = '' === prefix || prefix.endsWith('/') ? prefix : `${prefix}/`;
 
 		let files_remote = await this.list(prefix, true) as DirectoryItem[];
 		//let files = fs.readdirSync(dir, { withFileTypes: true });
 		let files = await remote_from.list(dir, true) as DirectoryItem[];
-		debug('files_remote', files_remote);
+		debug('files_remote', prefix, files_remote);
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
@@ -326,9 +328,7 @@ export default class s3driver implements S3Driver {
 					//console.log('queue_files');
 					if (upload_or_not)
 						this.queue_files!.add(async () => {
-							debug('upload', dir + file.name, prefix + file.name);
-							debug('download', dir + file.name, os.tmpdir() + '/' + file.name);
-
+							debug('downloading', dir + file.name, os.tmpdir() + '/' + file.name);
 							await remote_from.download(dir + file.name, os.tmpdir() + '/' + file.name);
 
 							if (!fs.existsSync(os.tmpdir() + '/' + file.name)) {
@@ -336,8 +336,10 @@ export default class s3driver implements S3Driver {
 							}
 							debug('downloaded');
 
-							await this.upload(os.tmpdir() + '/' + file.name, prefix + file.name, acl);
+							debug('uploading', os.tmpdir() + '/' + file.name, prefix + file.name);
+							const temp = await this.upload(os.tmpdir() + '/' + file.name, prefix + file.name, acl);
 							debug('uploaded');
+
 							fs.unlinkSync(os.tmpdir() + '/' + file.name);
 
 							// if dir queue have been paused - unpausing if files queue became smaller
@@ -359,7 +361,18 @@ export default class s3driver implements S3Driver {
 		}
 
 		//console.log('AFTER FOR queue_files.size', this.queue_files.size);
-		return true;
+		// Wait for both promises to resolve
+		return Promise.all([this.queue_dirs.onIdle(), this.queue_files.onIdle()])
+			.then(() => {
+				// Both queues have finished their tasks
+				debug("Both dir and files queus are finished.");
+				return true;
+			})
+			.catch((error) => {
+				// Handle errors if any of the promises reject
+				debug("Error while waiting for queues to finish:", error);
+				return JSON.stringify(error);
+			});
 	}
 
 	/**
@@ -583,7 +596,6 @@ export default class s3driver implements S3Driver {
 	 */
 	async upload(from: string, to: string, acl: ObjectCannedACL = 'public-read', attempt: number = 0, cb: null | Function = null) {
 		if (attempt) debug('attempt', attempt);
-	    let self = this;
 
 		// getting mime
 		// mimetypes good only with files with extension
