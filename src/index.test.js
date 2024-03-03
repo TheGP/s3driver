@@ -140,6 +140,10 @@ describe('s3driver', () => {
         const res = await s3.list('', true); // List all files with full data
         const uploadedDirectory = res.find(item => item.name === 's3testdir-copy' && item.is_dir);
         expect(uploadedDirectory).toBeDefined();
+
+        // Checking if all files has been uploaded correctly
+        const res2 = await s3.list('s3testdir-copy');
+        expect(res2).toEqual(['test1.txt', 'test2.txt']);
     }, 10000);
 
     test.only('should delete a file from the uploaded directory', async () => {
