@@ -1,33 +1,81 @@
 import fs from 'fs';
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand, PutObjectCommandInput, ObjectCannedACL } from "@aws-sdk/client-s3";
 
 import mimetypes from 'mime-types';
 import os from 'os';
 import Debug from 'debug';
+import PQueue from 'p-queue';
+import { FileTypeResult } from 'file-type';
+import { String } from 'aws-sdk/clients/batch';
+import { Readable } from 'stream';
+
+
 const debug = Debug('s3driver');
 
 let 
-	fileTypeFromFile, 
-	PQueue;
+	fileTypeFromFile: ((filePath: string) => Promise<FileTypeResult | undefined>) | undefined, 
+	PQueueClass: PQueue | null = null;
 
 import('file-type').then((fileTypeModule) => {
 	fileTypeFromFile = fileTypeModule.fileTypeFromFile;
-});  
+});
 
-export default class s3driver {
+export interface S3Config {
+    accessKeyId: string;
+    secretAccessKey: string;
+    endpoint?: string;
+    bucket: string;
+}
+
+export interface TransferParams {
+    acl?: ObjectCannedACL;
+    overwrite?: boolean;
+    overwrite_if_newer?: boolean;
+    dirs_concurrency?: number;
+    files_concurrency?: number;
+}
+
+export interface ListParams {
+    Bucket: string,
+    Delimiter: string,
+    Prefix: string,
+    MaxKeys?: number,
+}
+
+export interface DirectoryItem {
+    is_dir: boolean;
+    name: string;
+    mtime?: Date; // doesnt exists for dirs
+    size?: number; // doesnt exists for dirs
+}
+
+export interface S3Driver {
+    s3: S3Client | null;
+    bucket: string | null;
+
+    dirs_concurrency: number;
+    files_concurrency: number;
+    queue_dirs: null | PQueue;
+    queue_files: null | PQueue;
+    queue: null | PQueue;
+
+    config: (config: S3Config) => void,
+}
+
+
+export default class s3driver implements S3Driver {
+	s3: S3Client | null = null;
+	bucket: string = '';
+
+	dirs_concurrency: number = 15; // default
+	files_concurrency: number = 50; // default
+	queue_dirs: null | PQueue = null;
+	queue_files: null | PQueue = null;
+	queue: null | PQueue = null; // old uploadDir2
 
 	constructor() {
-		this.s3 = null;
-		this.bucket = null;
-
-		this.dirs_concurrency = 15; // default
-		this.files_concurrency = 50; // default
-		this.queue_dirs = null;
-		this.queue_files = null;
-		this.queue = null; // old uploadDir2
-
 		(async () => {
-			PQueue = (await import('p-queue')).default;
+			//PQueueClass = (await import('p-queue')).default;
 		})();
 	}
 
@@ -35,7 +83,7 @@ export default class s3driver {
 	 * Configures the S3 driver with the provided configuration.
 	 * @param {Object} config - S3 configuration object.
 	 */
-	config(config) {
+	config(config: S3Config) {
 		this.s3 = new S3Client({
 			...config,
 			credentials: {
@@ -63,17 +111,18 @@ export default class s3driver {
 	 * @param {number} [params.files_concurrency] - Number of concurrent files operations.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
-	async uploadDir(dir, prefix = '', params = {}) {
+	async uploadDir(dir: string, prefix: string = '', params: TransferParams = {}): Promise<boolean> {
 		debug('uploadDir', dir, prefix);
 
-		if ('undefined' === typeof PQueue) {
-			PQueue = (await import('p-queue')).default;
-		}
+		/*
+		if ('undefined' === typeof PQueueClass) {
+			PQueueClass = (await import('p-queue')).default;
+		}*/
 
 		let
 			overwrite = false,
 			overwrite_if_newer = false,
-			acl = 'public-read';
+			acl: ObjectCannedACL = 'public-read';
 
 		if ('acl' in params && params.acl) {
 			acl = params.acl;
@@ -101,7 +150,7 @@ export default class s3driver {
 		// removing first slash, if exists
 		prefix = prefix.replace(/^\//, '');
 
-		let files_remote = await this.list(prefix, true);
+		let files_remote = await this.list(prefix, true) as DirectoryItem[] ;
 		let files = fs.readdirSync(dir, { withFileTypes: true });
 		debug('files to upload:', files);
 
@@ -132,7 +181,7 @@ export default class s3driver {
 						let stats = fs.statSync(dir + file.name);
 						//console.log(stats);
 
-						if (undefined === file_remote || new Date(stats.mtime) > new Date(file_remote.mtime)) {
+						if (undefined === file_remote || (file_remote.mtime && new Date(stats.mtime) > new Date(file_remote.mtime))) {
 							console.log('MODIFIED!', file.name);
 							upload_or_not = true;
 						}
@@ -145,8 +194,8 @@ export default class s3driver {
 							await this.upload(dir + file.name, prefix + file.name, acl);
 
 							// if dir queue have been paused - unpausing if files queue became smaller
-							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
-								this.queue_dirs.start();
+							if (this.queue_dirs!.isPaused && 3 * this.files_concurrency > this.queue_files!.size) {
+								this.queue_dirs!.start();
 								debug('UNpausing dir queue');
 							}
 
@@ -190,12 +239,13 @@ export default class s3driver {
 	 * @param {number} [params.files_concurrency] - Number of concurrent files operations.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
-	async uploadDirCloud(CONF, dir, prefix = '', params = {}) {
+	async uploadDirCloud(CONF: S3Config, dir: string, prefix: string = '', params: TransferParams = {}) {
 		debug('uploadDir', dir, prefix);
 
-		if ('undefined' === typeof PQueue) {
-			PQueue = (await import('p-queue')).default;
-		}
+		/*
+		if ('undefined' === typeof PQueueClass) {
+			PQueueClass = (await import('p-queue')).default;
+		}*/
 
 		const remote_from = new s3driver;
 		remote_from.config(CONF);
@@ -205,7 +255,7 @@ export default class s3driver {
 		let
 			overwrite = false,
 			overwrite_if_newer = false,
-			acl = 'public-read';
+			acl: ObjectCannedACL = 'public-read';
 
 		if ('acl' in params && params.acl) {
 			acl = params.acl;
@@ -235,9 +285,9 @@ export default class s3driver {
 		// Removing the first slash, if it exists
 		prefix = prefix.replace(/^\//, '');
 
-		let files_remote = await this.list(prefix, true);
+		let files_remote = await this.list(prefix, true) as DirectoryItem[];
 		//let files = fs.readdirSync(dir, { withFileTypes: true });
-		let files = await remote_from.list(dir, true);
+		let files = await remote_from.list(dir, true) as DirectoryItem[];
 		debug('files_remote', files_remote);
 
 		//console.log(files_remote);
@@ -246,7 +296,7 @@ export default class s3driver {
 
 			if (file.is_dir) {
 				//console.log('uploadDir', dir, file.name, prefix, file.name);
-				this.queue_dirs.add(() => {
+				this.queue_dirs!.add(() => {
 					return this.uploadDirCloud(CONF, dir + file.name, prefix + file.name + '/', params);
 				}, {priority : 0});
 
@@ -266,7 +316,7 @@ export default class s3driver {
 						//let stats = fs.statSync(dir + file.name);
 						//console.log(stats);
 						debug('file_remote', file_remote);
-						if (undefined === file_remote || new Date(file.mtime) > new Date(file_remote.mtime)) {
+						if (undefined === file_remote || (file.mtime && file_remote.mtime && new Date(file.mtime) > new Date(file_remote.mtime))) {
 							debug('MODIFIED!', file.name);
 							upload_or_not = true;
 						}
@@ -274,7 +324,7 @@ export default class s3driver {
 
 					//console.log('queue_files');
 					if (upload_or_not)
-						this.queue_files.add(async () => {
+						this.queue_files!.add(async () => {
 							debug('upload', dir + file.name, prefix + file.name);
 							debug('download', dir + file.name, os.tmpdir() + '/' + file.name);
 
@@ -290,8 +340,8 @@ export default class s3driver {
 							fs.unlinkSync(os.tmpdir() + '/' + file.name);
 
 							// if dir queue have been paused - unpausing if files queue became smaller
-							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
-								this.queue_dirs.start();
+							if (this.queue_dirs!.isPaused && 3 * this.files_concurrency > this.queue_files!.size) {
+								this.queue_dirs!.start();
 								debug('UNpausing dir queue');
 							}
 
@@ -301,9 +351,9 @@ export default class s3driver {
 		}
 		
 		// If files queue 3 times bigger than in settings - pausing dirs queue so it wont eat too much memory
-		debug('queue_files.size', this.queue_files.size);
-		if (3 * this.files_concurrency < this.queue_files.size) {
-			this.queue_dirs.pause();
+		debug('queue_files.size', this.queue_files!.size);
+		if (3 * this.files_concurrency < this.queue_files!.size) {
+			this.queue_dirs!.pause();
 			debug('Pausing dir queue');
 		}
 
@@ -324,11 +374,13 @@ export default class s3driver {
 	 * @param {number} [params.files_concurrency] - Number of concurrent files operations.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the download is successful.
 	 */
-	async downloadDir(prefix = '', dir, params = {}) {
+	async downloadDir(prefix:string = '', dir: string, params: TransferParams = {}) {
 		debug('downloadDir', dir, prefix);
-		if ('undefined' === typeof PQueue) {
-			PQueue = (await import('p-queue')).default;
+		/*
+		if ('undefined' === typeof PQueueClass) {
+			PQueueClass = (await import('p-queue')).default;
 		}
+		*/
 
 		fs.mkdirSync(dir, { recursive: true });
 
@@ -363,7 +415,7 @@ export default class s3driver {
 		// removing first slash, if exists
 		prefix = prefix.replace(/^\//, '');
 
-		let files = await this.list(prefix, true);
+		let files = await this.list(prefix, true) as DirectoryItem[];
 
 		//console.log(files_remote);
 		//console.log('filling files/dir queue');
@@ -392,7 +444,7 @@ export default class s3driver {
 						}
 						//console.log(stats);
 
-						if (!local_file_exists || new Date(file.mtime) > new Date(stats.mtime)) {
+						if (!local_file_exists || (file.mtime && new Date(file.mtime) > new Date(stats!.mtime))) {
 							debug('MODIFIED!', file.name);
 							upload_or_not = true;
 						}
@@ -411,8 +463,8 @@ export default class s3driver {
 							}
 
 							// if dir queue have been paused - unpausing if files queue became smaller
-							if (this.queue_dirs.isPaused && 3 * this.files_concurrency > this.queue_files.size) {
-								this.queue_dirs.start();
+							if (this.queue_dirs!.isPaused && 3 * this.files_concurrency > this.queue_files!.size) {
+								this.queue_dirs!.start();
 								debug('UNpausing dir queue');
 							}
 
@@ -453,7 +505,7 @@ export default class s3driver {
 	 * @param {boolean} [overwrite=false] - Flag to overwrite existing files in S3.
 	 * @returns {Promise<boolean>} - A promise resolving to true if the upload is successful.
 	 */
-	async uploadDir2(dir, prefix = '', acl = 'public-read', overwrite = false) {
+	async uploadDir2(dir: string, prefix: string = '', acl: ObjectCannedACL = 'public-read', overwrite: boolean = false): Promise<boolean> {
 		debug('uploadDir', dir, prefix);
 		if (null === this.queue) {
 			this.queue = new PQueue({concurrency: 1});
@@ -513,7 +565,7 @@ export default class s3driver {
 
 					//console.log('uploadDir finished', dir, 'dir queue size=', self.queue.size, self.queue.pending);
 
-					resolve();
+					resolve(true);
 				}
 
 			}, 1000);
@@ -528,7 +580,7 @@ export default class s3driver {
 	 * @param {string} [acl='public-read'] - ACL (Access Control List) for the uploaded object.
 	 * @returns {Promise} - A promise resolving when the upload is complete.
 	 */
-	async upload(from, to, acl = 'public-read', attempt = 0, cb) {
+	async upload(from: string, to: string, acl: ObjectCannedACL = 'public-read', attempt: number = 0, cb: null | Function = null) {
 		if (attempt) debug('attempt', attempt);
 	    let self = this;
 
@@ -537,6 +589,7 @@ export default class s3driver {
 		let mime = mimetypes.lookup(from);
 
 		if (!mime) {
+			if ('function' !== typeof fileTypeFromFile) throw 'fileTypeFromFile is not loaded';
 			// this one works for images and videos but not on .js/.json etc
 			let res = await fileTypeFromFile(from);
 
@@ -550,7 +603,7 @@ export default class s3driver {
 		//console.log('file\'s mime', mime);
 
 	    const readStream = fs.createReadStream(from);
-	    const params = {
+	    const params: PutObjectCommandInput = {
 	        Bucket: this.bucket,
 	        Key: to,
 	        Body: readStream,
@@ -561,7 +614,7 @@ export default class s3driver {
 	    }
 
 		return new Promise((resolve, reject) => {
-			this.s3.send(new PutObjectCommand(params))
+			this.s3!.send(new PutObjectCommand(params))
 				.then(data => {
 					readStream.destroy();
 					if (typeof cb === 'function') cb(data);
@@ -593,7 +646,11 @@ export default class s3driver {
 	 * @param {string} to - Local file path to save the downloaded file.
 	 * @returns {Promise<string|boolean>} - A promise resolving to the local file path if successful, or false on failure.
 	 */
-	download(from, to) {
+	download(from: string, to: String) {
+		if (!this.bucket) {
+			throw new Error('Bucket is not defined.');
+		}
+
 	    const params = {
 	        Bucket: this.bucket,
 	        Key: from,
@@ -601,11 +658,11 @@ export default class s3driver {
 		debug('download method called with', params);
 	    return new Promise(async (resolve, reject) => {
 			try {
-				const data = await this.s3.send(new GetObjectCommand(params));
+				const data = await this.s3!.send(new GetObjectCommand(params)).then(data => data.Body as Readable);
 				//fs.writeFileSync(to, data.Body);
 
 				const writableStream = fs.createWriteStream(to)
-				data.Body.pipe(writableStream);
+				data.pipe(writableStream);
 		
 				// Wait for the writable stream to finish writing the data to the file
 				debug('waiting for stream to finish', to)
@@ -632,7 +689,7 @@ export default class s3driver {
 	 * @param {string} file - S3 object key to delete.
 	 * @returns {Promise<string|boolean>} - A promise resolving to the deleted object key if successful, or false on failure.
 	 */
-	async delete(path, attempt = 0) {
+	async delete(path: string, attempt: number = 0): Promise<string> {
 
 	    let self = this;
 
@@ -641,17 +698,17 @@ export default class s3driver {
 	        Key: path,
 	    };
 		try {
-			await this.s3.send(new DeleteObjectCommand(params));
+			await this.s3!.send(new DeleteObjectCommand(params));
 			return path;
 		} catch (err) {
-			console.error(err);
+			debug('Error:', err);
 			if ('SlowDown' == err.name || (err.$metadata && err.$metadata.httpStatusCode === 503)) {
-				console.debug('Received SlowDown error. Retrying in 2 sec...');
+				debug('Received SlowDown error. Retrying in 2 sec...');
 				if (attempt < 13) {
 					await new Promise(resolve => setTimeout(resolve, 2000));
 					return await this.delete(path, ++attempt); // <-----
 				} else {
-					console.debug('After trying 13 times "delete" failed', err);
+					debug('After trying 13 times "delete" failed', err);
 					throw err;
 				}
 			} else {
@@ -665,7 +722,7 @@ export default class s3driver {
 	 * @param {string} path - S3 directory path to delete.
 	 * @returns {Promise<Array>} - A promise resolving to an array of results for each deleted object.
 	 */
-	async deleteDir(path) {
+	async deleteDir(path: string): Promise<true|string> {
 		let files = await this.list(path);
 
 		// adding slash in the end if dont have
@@ -692,14 +749,14 @@ export default class s3driver {
 	 * @param {boolean} [full_data=false] - Flag to include full metadata for each object.
 	 * @returns {Promise<Array|string>} - A promise resolving to an array of object keys or full metadata objects.
 	 */
-	list(path, full_data = false) {
+	list(path: string, full_data: boolean = false): Promise<(string | DirectoryItem)[]> {
 
 		// adding slash in the end if missing
 		path = path.replace(/\/?$/, '/');
 		// if root path - removing / so it will work
 		if ('/' == path) path = '';
 
-		let params = {
+		let params: ListParams = {
 			Bucket: this.bucket,
 			Delimiter: '/',
 			Prefix: path,
@@ -714,27 +771,27 @@ export default class s3driver {
 	 * @param {string} key - S3 object key for which to retrieve metadata.
 	 * @returns {Promise<Object>} - A promise resolving to the metadata object for the specified S3 object.
 	 */
-	async getMetaData(key) {
+	async getMetaData(key: string): Promise<any> {
 
 		const params = {
 			Bucket: this.bucket,
 			Key: key,
 		}
-		const metaData = await this.s3.headObject(params).promise();
-		debug(metaData);
+		const metaData = await this.s3!.send(new HeadObjectCommand(params));
+		debug('Metadata:', metaData);
 
 		return metaData;
 	}
 
 	// PRIVATE
-	async listAllKeys(params, out = [], full_data = false) {
+	async listAllKeys(params: ListParams, out: (string | DirectoryItem)[] = [], full_data: boolean = false): Promise<(string | DirectoryItem)[]> {
 		try {
-			const response = await this.s3.send(new ListObjectsV2Command(params));
+			const response = await this.s3!.send(new ListObjectsV2Command(params));
 			const { Contents, CommonPrefixes, IsTruncated, NextContinuationToken } = response;
 	
 			// Process directories
 			if (Array.isArray(CommonPrefixes))
-			for (const el of CommonPrefixes) {
+			for (const el of CommonPrefixes) if (el.Prefix !== undefined) {
 				let name = el.Prefix.replace(new RegExp('^(' + params.Prefix + ')', 'g'), '');
 				name = name.replace(/\/$/, '');
 	
@@ -750,7 +807,7 @@ export default class s3driver {
 	
 			// Process files
 			if (Array.isArray(Contents))
-			for (const el of Contents) {
+			for (const el of Contents) if (el.Key !== undefined) {
 				let name = el.Key.replace(new RegExp('^(' + params.Prefix + ')', 'g'), '');
 	
 				if (name) {
