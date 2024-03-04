@@ -1,6 +1,6 @@
 {
   "name": "s3driver",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Simple to use wrapper for AWS S3 compatible storage. To stop waste time on such menial tasks",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

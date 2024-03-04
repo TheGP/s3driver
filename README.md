@@ -33,12 +33,16 @@ remote.config({
 (async () => {
 	// Uploading directory with public-read access
 	await remote.uploadDir('./test-dir', 'test-dir/');
+
 	// Listing files, add 2nd param "true" to get full data, and not only names
 	console.log('Files:', await remote.list('test-dir'));
+
 	// Getting metadata of a file
 	console.log('Files:', await remote.getMetaData('test-dir/1.txt'));
+
 	// Deleting a file
 	await remote.delete('test-dir/1.txt');
+
 	// Deleting a dir
 	await remote.deleteDir('s3driver-test-dir');
 })();
