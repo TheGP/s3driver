@@ -1,3 +1,4 @@
 node_modules/
 jestEnv.js
 dist/
+test-temp/

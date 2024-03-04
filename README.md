@@ -1,12 +1,13 @@
 # Simple driver for AWS S3 compatible storage
 
-This Node.js module provides a flexible AWS S3 driver for handling file uploads, downloads, and directory operations. It is designed to work with the [AWS SDK](https://aws.amazon.com/sdk-for-node-js/) and includes features for managing concurrency, uploading directories, and more.
+This is a simple quick to use wrapper for [AWS SDK v3](https://aws.amazon.com/sdk-for-javascript/). This tool is crafted to streamline file management in the cloud, freeing up your time to concentrate on higher-priority tasks.
 
 # Features
 
 * Upload: Upload files and directories to S3.
 * Download: Download files and directories from S3.
 * Cloud transfer: Transfer files from one storage to another.
+* Syncing: Ignore file if it exist, or replace only if it is newer.
 * Delete: Delete files and directories from S3.
 * List: List objects in an S3 directory with optional metadata.
 * Meta data: Get files' metadata.
@@ -19,7 +20,7 @@ npm i s3driver
 
 # Example
 ```js
-const s3driver = require('s3driver');
+import s3driver from 's3driver';
 const remote = new s3driver();
 
 remote.config({
@@ -30,8 +31,15 @@ remote.config({
 });
 
 (async () => {
+	// Uploading directory with public-read access
 	await remote.uploadDir('./test-dir', 'test-dir/');
+	// Listing files, add 2nd param "true" to get full data, and not only names
 	console.log('Files:', await remote.list('test-dir'));
+	// Getting metadata of a file
+	console.log('Files:', await remote.getMetaData('test-dir/1.txt'));
+	// Deleting a file
+	await remote.delete('test-dir/1.txt');
+	// Deleting a dir
 	await remote.deleteDir('s3driver-test-dir');
 })();
 ```
@@ -147,8 +155,8 @@ env DEBUG=s3driver node app.js
 Create file `jestEnv.js` in the package folder with connection data:
 
 ```
-process.env.ACCESS_KEY_ID="D100QEKD9WY474WRY76C"
-process.env.SECRET_ACCESS_KEY="kzHf79O0xI/Q5Gx2M91NJuCrYM6m21l5/Xk46E77oK1"
+process.env.ACCESS_KEY_ID="AWG7P3D8VX5Z9F21L6QC"
+process.env.SECRET_ACCESS_KEY="sX9KpR4HjQ8UyL3oB6ZvA2DcP1F5TtG7IiJ2R8JqD3L4O9P2L7E8"
 process.env.ENDPOINT="fra1.digitaloceanspaces.com"
 process.env.BUCKET="testbucket"
 ```
